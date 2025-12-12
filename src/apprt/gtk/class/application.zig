@@ -2259,9 +2259,24 @@ const Action = struct {
                     return true;
                 },
             },
-            .tab => {
-                // GTK does not yet support tab title prompting
-                return false;
+            .tab => switch (target) {
+                .app => {
+                    // For app target, use the active window
+                    const app = Application.default();
+                    const gtk_window = app.as(gtk.Application).getActiveWindow() orelse return false;
+                    const window = gobject.ext.cast(Window, gtk_window) orelse return false;
+                    window.promptTabTitle();
+                    return true;
+                },
+                .surface => |v| {
+                    // For surface target, get the window containing that surface
+                    const window = ext.getAncestor(
+                        Window,
+                        v.rt_surface.surface.as(gtk.Widget),
+                    ) orelse return false;
+                    window.promptTabTitle();
+                    return true;
+                },
             },
         }
     }

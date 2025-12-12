@@ -26,6 +26,7 @@ const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseCo
 const SplitTree = @import("split_tree.zig").SplitTree;
 const Surface = @import("surface.zig").Surface;
 const Tab = @import("tab.zig").Tab;
+const TabTitleDialog = @import("tab_title_dialog.zig").TabTitleDialog;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
@@ -1931,6 +1932,41 @@ pub const Window = extern struct {
         // TODO: accept the surface that toggled the command palette as a
         // parameter
         self.toggleInspector();
+    }
+
+    /// Prompt the user for a new tab title. This shows a dialog that
+    /// allows the user to set a custom tab title.
+    pub fn promptTabTitle(self: *Self) void {
+        const tab = self.getSelectedTab() orelse return;
+        const dialog = gobject.ext.newInstance(
+            TabTitleDialog,
+            .{
+                .@"initial-value" = tab.getTitleOverride(),
+            },
+        );
+        _ = TabTitleDialog.signals.set.connect(
+            dialog,
+            *Tab,
+            tabTitleDialogSet,
+            tab,
+            .{},
+        );
+
+        dialog.present(self.as(gtk.Widget));
+    }
+
+    fn tabTitleDialogSet(
+        _: *TabTitleDialog,
+        title: [*:0]const u8,
+        tab: *Tab,
+    ) callconv(.c) void {
+        // If the title is empty, we clear the override.
+        const title_span = std.mem.span(title);
+        if (title_span.len == 0) {
+            tab.setTitleOverride(null);
+        } else {
+            tab.setTitleOverride(title_span);
+        }
     }
 
     const C = Common(Self, Private);
