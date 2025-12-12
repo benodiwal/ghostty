@@ -205,6 +205,10 @@ extension Ghostty {
         // This is set to non-null during keyDown to accumulate insertText contents
         private var keyTextAccumulator: [String]? = nil
 
+        // This is set to true during keyDown if a noop: command was received,
+        // indicating we're in the middle of a multi-key binding (e.g., DefaultKeyBindings.dict)
+        private var receivedNoopCommand: Bool = false
+
         // A small delay that is introduced before a title change to avoid flickers
         private var titleChangeTimer: Timer?
 
@@ -1045,6 +1049,12 @@ extension Ghostty {
             keyTextAccumulator = []
             defer { keyTextAccumulator = nil }
 
+            // Reset the noop command flag before interpreting events. This flag is set
+            // by doCommand when a noop: selector is received, indicating we're in the
+            // middle of a multi-key binding (e.g., DefaultKeyBindings.dict).
+            receivedNoopCommand = false
+            defer { receivedNoopCommand = false }
+
             // We need to know what the length of marked text was before this event to
             // know if these events cleared it.
             let markedTextBefore = markedText.length > 0
@@ -1088,6 +1098,12 @@ extension Ghostty {
                         text: text
                     )
                 }
+            } else if receivedNoopCommand {
+                // We received a noop: command, which means we're in the middle of a
+                // multi-key binding (e.g., DefaultKeyBindings.dict). Don't send the
+                // intermediate character to the terminal - wait for the final result
+                // which will come through insertText.
+                return
             } else {
                 // We have no accumulated text so this is a normal key event.
                 _ = keyAction(
@@ -1861,7 +1877,13 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             return
         }
 
-        print("SEL: \(selector)")
+        // Track if we received a noop: command. This is sent by the input system
+        // when a key is part of a multi-key binding (e.g., DefaultKeyBindings.dict)
+        // but is not the final key. We use this to avoid sending intermediate
+        // characters to the terminal.
+        if selector == Selector(("noop:")) {
+            receivedNoopCommand = true
+        }
     }
 
     /// Sync the preedit state based on the markedText value to libghostty
